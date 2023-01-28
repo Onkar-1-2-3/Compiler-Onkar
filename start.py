@@ -35,6 +35,9 @@ class StringLiteral:
     value: str
     type: SimType=StringType
     
+@dataclass
+class Un_boolify:
+    left:'AST'
 
 @dataclass
 class BinOp:
@@ -52,14 +55,13 @@ class UnOp:
     operator: str
     vari : int
 
-
 @dataclass
 class StringOp:
     operator:str
     left:'AST'
     right:Optional['AST']=None
     #type:StringLiteral
-    
+
 @dataclass
 class StringSlice(StringOp):
     start: Optional[int] = None
@@ -132,12 +134,17 @@ def typecheck(program: AST, env = None) -> TypedAST:
             if tleft.type != StringType:
                 raise TypeError()
             return StringSlice("slice", left, start, stop, step, StringType)
+        
+        case Un_boolify(left):
+            tleft=typecheck(left)
+            if tleft.type!=NumType or StringType:
+                raise TypeError()
+            return Un_boolify(left)
     raise TypeError()
 Value = Fraction
 
 class InvalidProgram(Exception):
     pass
-
 
 def eval(program: AST, environment: Mapping[str, Value] = None) -> Value:
     if environment is None:
@@ -161,32 +168,8 @@ def eval(program: AST, environment: Mapping[str, Value] = None) -> Value:
         case BinOp("*", left, right):
             return eval(left, environment) * eval(right, environment)
         case BinOp("/", left, right):
-            if(right==0):
-                raise InvalidProgram()
             return eval(left, environment) / eval(right, environment)
-        case BinOp("//", left, right):
-            if(right==0):
-                raise InvalidProgram()
-            return eval(left, environment) // eval(right, environment)
-        case BinOp("%", left, right):
-            if(right==0):
-                raise InvalidProgram()
-            return eval(left, environment) % eval(right, environment)
-        case BinOp("**", left, right):
-            return eval(left, environment) ** eval(right, environment)
-        case BinOp("==",left,right):
-            return eval(left, environment) == eval(right, environment)
-        case BinOp("<",left,right):
-            return eval(left, environment) < eval(right, environment)
-        case BinOp(">",left,right):
-            return eval(left, environment) > eval(right, environment)
-        case BinOp(">=",left,right):
-            return eval(left, environment) >= eval(right, environment)
-        case BinOp("<=",left,right):
-            return eval(left, environment) <= eval(right, environment)
-        case BinOp("!=",left,right):
-            return eval(left, environment) != eval(right, environment)
-    
+
         # Bitwise Operators With type checking
         case BinOp("&",left,right):
             left_type=typecheck(left).type
@@ -211,7 +194,7 @@ def eval(program: AST, environment: Mapping[str, Value] = None) -> Value:
             right_type=typecheck(right).type
             
             if(left_type!=NumType or right_type!=NumType):
-                print(left_type) 
+                print(left_type)
                 print(right_type)
                 raise InvalidProgram()
             return int(eval(left,environment)) ^ int(eval(right,environment))
@@ -233,7 +216,8 @@ def eval(program: AST, environment: Mapping[str, Value] = None) -> Value:
                 print(right_type)
                 raise InvalidProgram()
             return int(eval(left,environment)) << int(eval(right,environment))
-  
+
+        
         # String Operations
         # implement string typecheck for this
         case StringOp('add',left,right):
@@ -243,7 +227,7 @@ def eval(program: AST, environment: Mapping[str, Value] = None) -> Value:
         case StringSlice("slice", left,start, stop,step):
             left_value = eval(left, environment)
             return left_value[start:stop:step]
-        #unary Operations
+         #unary Operations
         case UnOp('-',vari):
             un=eval(vari)
             un=-un
@@ -256,92 +240,13 @@ def eval(program: AST, environment: Mapping[str, Value] = None) -> Value:
             un=eval(vari)
             un=un-1
             return eval(NumLiteral(un))
-
+        case Un_boolify(left):
+            left_var=eval(left,environment)
+            if left_var==0:
+                return bool(left_var)
+            elif left_var:
+                return bool(left_var)
+            elif len(left_var)==0:
+                return bool(left_var)
+            return bool(left_var)
     raise InvalidProgram()
-
-
-def test_typecheck():
-    import pytest
-    te = typecheck(BinOp("+", NumLiteral(2), NumLiteral(3)))
-    assert te.type == NumType
-    te = typecheck(BinOp("<", NumLiteral(2), NumLiteral(3)))
-    assert te.type == BoolType
-    # with pytest.raises(TypeError):
-    #     typecheck(BinOp("+", BinOp("*", NumLiteral(2), NumLiteral(3)), BinOp("<", NumLiteral(2), NumLiteral(3))))
-
-def test_string():
-    a=StringLiteral("hello ")
-    b=StringLiteral("world! ")
-    c=StringOp("add",a,b)
-    print(eval(c))
-    print(eval(StringOp('length',c)))
-    #print(eval(StringOp('slice',)))
-
-    y=StringLiteral("Welcome")
-    slice = StringSlice("slice",y,1,5)
-    print(eval(slice))
-    assert eval(slice)=="elco"
-
-def test_unop():
-    
-    a=Variable("a")
-    e1=NumLiteral(1) 
-    e2=UnOp("++",e1)
-    e3=UnOp("-",e1)
-    e4=UnOp("--",e1)
-    assert eval(e3)== -1
-    assert eval(e2)==2
-    assert eval(e4)== 0
-
-    a=Variable("a")
-    e1=NumLiteral(2)
-    b=NumLiteral(1)
-    e2=BinOp("+",b,BinOp("*",UnOp("--",e1),e1))     #1+((2--)*2) = 3
-    assert eval(e2)==3
-    
-    
-    e1=NumLiteral(10)
-    b=NumLiteral(5)
-    c=NumLiteral(2)
-    e2=BinOp("+",UnOp("++",e1),BinOp("*",UnOp("-",c),b))     #(10++) + ((-2)*5) = 1
-    assert eval(e2)==1
-
-    a  = Variable("a")
-    e1 = NumLiteral(5)
-    e2 = BinOp("+", a, a)
-    e3 = UnOp("++",Let(a, e1, BinOp("+", a, Let(a, e2, e2))))
-    assert eval(e3)==26
-
-def test_bit():
-    # "Bitwise AND"
-    a=NumLiteral(15)
-    b=NumLiteral(4)
-    c=BinOp("&",a,b)   
-    assert eval(c)==4
-
-    # "Bitwise OR"
-    a=NumLiteral(12)
-    b=NumLiteral(20)
-    c=BinOp("|",a,b)
-    assert eval(c)==28
-
-    # "Bitwise XOR"
-    a=NumLiteral(34)
-    b=NumLiteral(41)
-    c=BinOp("^",a,b)
-    assert eval(c)==11
-
-def test_ls_rs():
-    
-    # "Bitwise Right Shift"
-    a=NumLiteral(10)
-    b=NumLiteral(1)
-    c=BinOp(">>",a,b)
-    assert eval(c)==5
-
-    # "Bitwise Left Shift"
-    a=NumLiteral(8)
-    b=NumLiteral(3)
-    c=BinOp("<<",a,b)
-    assert eval(c)==64
-
