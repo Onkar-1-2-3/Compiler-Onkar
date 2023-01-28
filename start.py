@@ -60,6 +60,12 @@ class StringOp:
     right:Optional['AST']=None
     #type:StringLiteral
     
+@dataclass
+class StringSlice(StringOp):
+    start: Optional[int] = None
+    stop: Optional[int] = None
+    step: Optional[int] = None
+    type: Optional[SimType] = StringType
 
 @dataclass
 class Let:
@@ -121,6 +127,11 @@ def typecheck(program: AST, env = None) -> TypedAST:
             if tt.type != tf.type: # Both branches must have the same type.
                 raise TypeError()
             return IfElse(tc, tt, tf, tt.type) # The common type becomes the type of the if-else.
+        case StringSlice("slice",left,start, stop, step):
+            tleft = typecheck(left)
+            if tleft.type != StringType:
+                raise TypeError()
+            return StringSlice("slice", left, start, stop, step, StringType)
     raise TypeError()
 Value = Fraction
 
@@ -229,7 +240,9 @@ def eval(program: AST, environment: Mapping[str, Value] = None) -> Value:
             return eval(left)+eval(right)
         case StringOp('length',left):
             return len(eval(left))
-        
+        case StringSlice("slice", left,start, stop,step):
+            left_value = eval(left, environment)
+            return left_value[start:stop:step]
         #unary Operations
         case UnOp('-',vari):
             un=eval(vari)
@@ -263,6 +276,11 @@ def test_string():
     print(eval(c))
     print(eval(StringOp('length',c)))
     #print(eval(StringOp('slice',)))
+
+    y=StringLiteral("Welcome")
+    slice = StringSlice("slice",y,1,5)
+    print(eval(slice))
+    assert eval(slice)=="elco"
 
 def test_unop():
     
